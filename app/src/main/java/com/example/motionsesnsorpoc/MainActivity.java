@@ -44,6 +44,7 @@ public class MainActivity extends AppCompatActivity {
     private CaptureRequest.Builder captureRequestBuilder;
     private CaptureRequest captureRequest;
     private CameraCaptureSession cameraCaptureSessions;
+    private CameraCharacteristics cameraCharacteristics;
     private Handler mBackgroundHandler;
     private HandlerThread mBackgroundThread;
     private int imageWidth;
@@ -155,8 +156,8 @@ public class MainActivity extends AppCompatActivity {
 
         try {
             cameraId = manager.getCameraIdList()[0];
-            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
-            StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+            cameraCharacteristics = manager.getCameraCharacteristics(cameraId);
+            StreamConfigurationMap map = cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
 
             if (map == null) {
                 throw new CameraAccessException(CameraAccessException.CAMERA_ERROR);
@@ -219,10 +220,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updatePreview() {
+        // this should be 90, maybe we can feed this to motion detector instead of hardcoding the necessary
+        // 270 degrees rotation
+        Log.i(TAG, "orientation>>>> " + cameraCharacteristics.get(CameraCharacteristics.SENSOR_ORIENTATION));
+
         if (null == cameraDevice) {
             Log.e(TAG, "updatePreview error, return");
         }
         captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
+        captureRequestBuilder.set(CaptureRequest.JPEG_ORIENTATION, getJpegOrientation());
         try {
             cameraCaptureSessions.setRepeatingRequest(captureRequestBuilder.build(), null, mBackgroundHandler);
         } catch (CameraAccessException e) {
@@ -251,6 +257,30 @@ public class MainActivity extends AppCompatActivity {
         };
 
         imageReader.setOnImageAvailableListener(imageReaderListener, mBackgroundHandler);
+    }
+
+    private int getJpegOrientation() {
+        int deviceOrientation = this.getWindowManager().getDefaultDisplay().getRotation();
+
+        if (deviceOrientation == android.view.OrientationEventListener.ORIENTATION_UNKNOWN) {
+            return 0;
+        }
+
+        int sensorOrientation = cameraCharacteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
+
+        // Round device orientation to a multiple of 90
+        deviceOrientation = (deviceOrientation + 45) / 90 * 90;
+
+        // Reverse device orientation for front-facing cameras
+        boolean facingFront = cameraCharacteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT;
+
+        if (facingFront) {
+            deviceOrientation = -deviceOrientation;
+        }
+
+        // Calculate desired JPEG orientation relative to camera orientation to make
+        // the image upright relative to the device orientation
+        return (sensorOrientation + deviceOrientation + 360) % 360;
     }
 
     private void startBackgroundThread() {

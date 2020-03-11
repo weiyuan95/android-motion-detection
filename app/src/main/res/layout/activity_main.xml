@@ -6,10 +6,27 @@
 <!--    android:layout_height="match_parent"-->
 <!--    tools:context=".MainActivity">-->
 
-<TextureView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/preview"
+<FrameLayout
+    android:layout_height="match_parent"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
-</TextureView>
+    android:orientation="vertical"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+
+
+    <TextureView
+        android:id="@+id/preview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+    </TextureView>
+
+    <View
+        android:layout_width="1dp"
+        android:layout_height="match_parent"
+        android:background="@android:color/holo_red_dark"
+        android:layout_gravity="center"/>
+
+
+</FrameLayout>
+
 
 <!--</androidx.constraintlayout.widget.ConstraintLayout>-->
