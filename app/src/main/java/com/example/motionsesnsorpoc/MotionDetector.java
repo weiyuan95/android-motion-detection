@@ -3,13 +3,11 @@ package com.example.motionsesnsorpoc;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
-import android.media.ExifInterface;
-import android.media.Image;
 import android.util.Log;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
+import java.sql.Timestamp;
 import java.text.DecimalFormat;
+import java.util.Date;
 
 class MotionDetector {
 
@@ -21,7 +19,7 @@ class MotionDetector {
     private int bmHeight;
     private static final int MIDDLE_PIXEL_WIDTH = 1;
 
-    boolean motionDetected(Image image) {
+    boolean motionDetected(byte[] bytes) {
 
         /*
         Processes an image into an integer array, and calculates the average value.
@@ -29,11 +27,7 @@ class MotionDetector {
         there is some motion happening
         */
 
-//        Log.i(TAG, "Pixel height: " + image.getHeight());
-//        Log.i(TAG, "Pixel width: " + image.getWidth());
-        process(image);
-
-
+        process(bytes);
 
         if (previousValue == Double.POSITIVE_INFINITY) {
             previousValue = calculatePixelAverage();
@@ -43,18 +37,15 @@ class MotionDetector {
         double newValue = calculatePixelAverage();
         DecimalFormat decimalFormat = new DecimalFormat("#.#####");
         double pctDifference = Math.abs((newValue - previousValue) / previousValue);
-        Log.i(TAG, "% difference: " + decimalFormat.format(pctDifference));
+        Timestamp ts = new Timestamp(new Date().getTime());
+        Log.i(TAG, ts + ">>> % difference: " + decimalFormat.format(pctDifference));
 
         previousValue = newValue;
 
         return pctDifference > 0.1;
     }
 
-    private void process(Image image) {
-        ByteBuffer buffer = image.getPlanes()[0].getBuffer();
-        byte[] bytes = new byte[buffer.capacity()];
-        buffer.get(bytes);
-        image.close();
+    private void process(byte[] bytes) {
 
         bm = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
         bmWidth = bm.getWidth();

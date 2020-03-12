@@ -32,6 +32,9 @@ import android.view.TextureView;
 import android.widget.Toast;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -42,15 +45,17 @@ public class MainActivity extends AppCompatActivity {
     private Size imageDimension;
     private TextureView textureView;
     private CaptureRequest.Builder captureRequestBuilder;
-    private CaptureRequest captureRequest;
     private CameraCaptureSession cameraCaptureSessions;
     private CameraCharacteristics cameraCharacteristics;
     private Handler mBackgroundHandler;
     private HandlerThread mBackgroundThread;
+    private Handler imReaderBackgroundHandler;
     private int imageWidth;
     private int imageHeight;
     private Surface imageReaderSurface;
     private MotionDetector motionDetector;
+    private ImageReader imageReader;
+    private ExecutorService threadPool;
 
     private final CameraCaptureSession.StateCallback captureSessionStateCallback = new CameraCaptureSession.StateCallback() {
         @Override
@@ -120,6 +125,22 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        startBackgroundThread();
+        /*
+        need to find the right thread pool to use
+        newSingleThreadExecutor
+            -> causes memory issues. So many images are being sent that there's not enough RAM
+        newCachedThreadPool
+            -> works for a while, then just dies. No idea why, but maybe because too many threads
+            are being spawned
+        newFixedThreadPool
+            -> same as the cached thread pool
+
+            lowering the pixel density to 2880x2160 (index 7) didnt work as well
+            1440x1080 (index 11)
+            trying lower densities...
+        */
+        threadPool = Executors.newFixedThreadPool(5);
         textureView = findViewById(R.id.preview);
         textureView.setSurfaceTextureListener(textureListener);
 
@@ -166,8 +187,11 @@ public class MainActivity extends AppCompatActivity {
             // maybe need to change ImageFormat to something else?
             // save the dimensions of the image preview to a instance variable
             Size[] jpegSizes = map.getOutputSizes(ImageFormat.JPEG);
-            imageWidth = jpegSizes[0].getWidth();
-            imageHeight = jpegSizes[0].getHeight();
+            Log.i(TAG, Arrays.toString(jpegSizes));
+//            2880x2160 (index 7)
+//            1440x1080 (index 12)
+            imageWidth = jpegSizes[12].getWidth();
+            imageHeight = jpegSizes[12].getHeight();
 
             imageDimension = map.getOutputSizes(SurfaceTexture.class)[0];
 
@@ -239,16 +263,23 @@ public class MainActivity extends AppCompatActivity {
     private void setupImageReaderListener() {
 
         // maxImages to 2 for real time processing
-        ImageReader imageReader = ImageReader.newInstance(imageWidth, imageHeight, ImageFormat.JPEG, 2);
+        imageReader = ImageReader.newInstance(imageWidth, imageHeight, ImageFormat.JPEG, 1);
         imageReaderSurface = imageReader.getSurface();
 
         ImageReader.OnImageAvailableListener imageReaderListener = new ImageReader.OnImageAvailableListener() {
             @Override
             public void onImageAvailable(ImageReader reader) {
-                Image image = reader.acquireLatestImage();
+                Image image = reader.acquireNextImage();
+
                 if (image != null) {
-                    if (motionDetector.motionDetected(image)) {
-                        Log.i(TAG, "motion detected!!");
+                    byte[] bytes = new ImageProcessor().processImage(image);
+                    image.close();
+
+                    // threading works now, but non threaded works just as well
+//                    threadPool.execute(new MotionDetectionThread(bytes));
+
+                    if (motionDetector.motionDetected(bytes)) {
+                        Log.e(TAG, "motion detected!!");
                     }
 
                 }
@@ -256,7 +287,7 @@ public class MainActivity extends AppCompatActivity {
             }
         };
 
-        imageReader.setOnImageAvailableListener(imageReaderListener, mBackgroundHandler);
+        imageReader.setOnImageAvailableListener(imageReaderListener, imReaderBackgroundHandler);
     }
 
     private int getJpegOrientation() {
@@ -287,6 +318,11 @@ public class MainActivity extends AppCompatActivity {
         mBackgroundThread = new HandlerThread("Camera Background");
         mBackgroundThread.start();
         mBackgroundHandler = new Handler(mBackgroundThread.getLooper());
+
+        HandlerThread imReaderBackgroundThread = new HandlerThread("Image Reader handler");
+        imReaderBackgroundThread.start();
+        imReaderBackgroundHandler = new Handler(imReaderBackgroundThread.getLooper());
+
     }
 
     private void stopBackgroundThread() {
